@@ -50,7 +50,11 @@ class EmbeddingModel:
 
     @staticmethod
     def _flatten_walks(walks_for_nodes):
-        return [np.trim_zeros(walk, 'b') for walks in walks_for_nodes.values() for walk in walks]
+        flattened_walks = []
+        for walks in walks_for_nodes.values():
+            for walk in walks:
+                flattened_walks.append(np.trim_zeros(walk, 'b'))
+        return flattened_walks
 
     def _train_model_with_walks(self, walks):
         if not self.embedding_model.wv.key_to_index:
