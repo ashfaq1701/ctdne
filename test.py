@@ -4,7 +4,7 @@ import time
 from ctdne import EmbeddingModel
 
 NUM_WALKS = 100
-LEN_WALK = 50
+LEN_WALK = 200
 D_EMBED = 512
 
 def read_data():
