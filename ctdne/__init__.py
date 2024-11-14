@@ -35,8 +35,12 @@ class EmbeddingModel:
     def add_temporal_edges(self, edges: List[Tuple[int, int, int]]):
         self.temporal_walk.add_multiple_edges(edges)
 
-    def get_walks_from_network(self):
-        nodes = self.temporal_walk.get_node_ids()
+    def get_walks_from_network(self, node_ids=None):
+        if node_ids is None:
+            nodes = self.temporal_walk.get_node_ids()
+        else:
+            nodes = node_ids
+
         walks_for_nodes = self.temporal_walk.get_random_walks_for_nodes("Random", nodes, self.fill_value)
         flattened_walks = self._flatten_walks(walks_for_nodes)
         return flattened_walks

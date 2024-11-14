@@ -1,11 +1,9 @@
+import argparse
 import csv
 import time
 
 from ctdne import EmbeddingModel
 
-NUM_WALKS = 100
-LEN_WALK = 200
-D_EMBED = 512
 
 def read_data():
     data_file_path = 'data/sample_data.csv'
@@ -23,13 +21,22 @@ def read_data():
 
     return data_tuples
 
+
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="CTDNE test.")
+
+    parser.add_argument('--num_walks', type=int, default=100, help='Number of walks per node.')
+    parser.add_argument('--len_walk', type=int, default=200, help='Length of each walk.')
+    parser.add_argument('--d_embed', type=int, default=256, help='Dimension of embeddings of each node.')
+
+    args = parser.parse_args()
+
     start_time = time.time()
     embedding_model = EmbeddingModel(
-        num_walks=NUM_WALKS,
-        len_walk=LEN_WALK,
+        num_walks=args.num_walks,
+        len_walk=args.len_walk,
         random_picker_type="Linear",
-        d_embed=D_EMBED
+        d_embed=args.d_embed,
     )
 
     data = read_data()
