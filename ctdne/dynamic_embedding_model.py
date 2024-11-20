@@ -4,7 +4,7 @@ import torch.optim as optim
 
 
 class DynamicEmbeddingModel(nn.Module):
-    def __init__(self, max_node_count, embedding_dim, lr=0.001, max_norm=1.0, alpha=0.5, context_size=5):
+    def __init__(self, max_node_count, embedding_dim, lr=0.001, max_norm=1.0, alpha=0.5, context_size=5, device=None):
         """
         Computes Dynamic Embedding
 
@@ -22,13 +22,18 @@ class DynamicEmbeddingModel(nn.Module):
         self.max_norm = max_norm
         self.alpha = alpha
         self.context_size = context_size
+        self.device = device or torch.device(
+            'cuda' if torch.cuda.is_available()
+            else 'mps' if torch.backends.mps.is_available()
+            else 'cpu'
+        )
 
         # Internal mapping for node IDs to indices
         self.node_id_to_idx = {}
         self.current_idx = 0
 
         # Fixed embedding matrix
-        self.embeddings = nn.Embedding(max_node_count, embedding_dim, max_norm=max_norm)
+        self.embeddings = nn.Embedding(max_node_count, embedding_dim, max_norm=max_norm).to(self.device)
         nn.init.uniform_(self.embeddings.weight, -1, 1)
 
         # Optimizer for the embeddings
@@ -62,7 +67,9 @@ class DynamicEmbeddingModel(nn.Module):
         Returns:
             torch.Tensor: Embeddings for the provided node IDs.
         """
-        indices = torch.tensor([self._get_or_create_index(node_id) for node_id in node_ids], dtype=torch.long)
+        indices = torch.tensor(
+            [self._get_or_create_index(node_id) for node_id in node_ids], dtype=torch.long, device=self.device
+        )
         return self.embeddings(indices)
 
     def train_model(self, walks, batch_size=128, epochs=10):
@@ -117,7 +124,9 @@ class DynamicEmbeddingModel(nn.Module):
             torch.Tensor: The loss for the current walk.
         """
         total_loss = 0
-        walk = torch.tensor([self._get_or_create_index(node_id) for node_id in walk], dtype=torch.long)
+        walk = torch.tensor(
+            [self._get_or_create_index(node_id) for node_id in walk], dtype=torch.long,  device=self.device
+        )
 
         for i, current_node_idx in enumerate(walk):
             # Extract context window
@@ -126,7 +135,7 @@ class DynamicEmbeddingModel(nn.Module):
 
             context = torch.cat([walk[start:i], walk[i + 1:end]])
             distances = torch.tensor(
-                [abs(i - j) for j in range(start, end) if j != i], dtype=torch.float32
+                [abs(i - j) for j in range(start, end) if j != i], dtype=torch.float32,  device=self.device
             )
             discounts = self.discount_function(distances)
 
@@ -171,7 +180,7 @@ class DynamicEmbeddingModel(nn.Module):
         idx = self.node_id_to_idx.get(node_id)
         if idx is None:
             raise KeyError(f"Node {node_id} is not in the embeddings.")
-        return self.embeddings(torch.tensor([idx], dtype=torch.long)).detach().cpu()
+        return self.embeddings(torch.tensor([idx], dtype=torch.long, device=self.device)).detach().cpu()
 
     def get_all_embeddings(self):
         """
@@ -180,5 +189,5 @@ class DynamicEmbeddingModel(nn.Module):
         Returns:
             dict: A dictionary with node IDs as keys and embeddings as values.
         """
-        return {node_id: self.embeddings(torch.tensor([idx], dtype=torch.long)).detach().cpu()
+        return {node_id: self.embeddings(torch.tensor([idx], dtype=torch.long, device=self.device)).detach().cpu()
                 for node_id, idx in self.node_id_to_idx.items()}

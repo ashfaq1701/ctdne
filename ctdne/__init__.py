@@ -1,6 +1,7 @@
 from typing import List, Tuple, Optional
 
 import numpy as np
+import torch
 from temporal_walk import TemporalWalk
 
 from ctdne.dynamic_embedding_model import DynamicEmbeddingModel
@@ -24,6 +25,7 @@ class EmbeddingModel:
             embedding_epochs: int=5,
             context_len: int=5,
             learning_rate: float=0.001,
+            device:Optional[torch.device]=None,
             min_count: int=1,
             workers: int=6
     ):
@@ -36,7 +38,8 @@ class EmbeddingModel:
 
         self.temporal_walk = TemporalWalk(num_walks, len_walk, random_picker_type, max_time_capacity)
         self.embedding_model = DynamicEmbeddingModel(
-            max_node_count=max_node_count, embedding_dim=d_embed, context_size=context_len, lr=learning_rate
+            max_node_count=max_node_count, embedding_dim=d_embed,
+            context_size=context_len, lr=learning_rate, device=device
         )
 
     def add_temporal_edges(self, edges: List[Tuple[int, int, int]]):
