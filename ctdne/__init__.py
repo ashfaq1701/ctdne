@@ -1,8 +1,10 @@
 from typing import List, Tuple, Optional
 
-from temporal_walk import TemporalWalk
-from gensim.models import Word2Vec
 import numpy as np
+from temporal_walk import TemporalWalk
+
+from ctdne.dynamic_embedding_model import DynamicNodeEmbeddingModel
+
 
 class NodeNotFoundError(Exception):
     def __init__(self, node_id: int):
@@ -17,8 +19,10 @@ class EmbeddingModel:
             random_picker_type: str,
             d_embed: int,
             max_time_capacity: Optional[int]=None,
+            batch_size: int = 10_000,
             embedding_epochs: int=5,
-            window: int=10,
+            context_len: int=5,
+            learning_rate: float=0.001,
             min_count: int=1,
             workers: int=6
     ):
@@ -26,10 +30,12 @@ class EmbeddingModel:
         self.len_walk = len_walk
         self.random_picker_type = random_picker_type
         self.fill_value = 0
+        self.batch_size = batch_size
+        self.embedding_epochs = embedding_epochs
 
         self.temporal_walk = TemporalWalk(num_walks, len_walk, random_picker_type, max_time_capacity)
-        self.embedding_model = Word2Vec(
-            vector_size=d_embed, epochs=embedding_epochs, window=window, min_count=min_count, sg=1, workers=workers
+        self.embedding_model = DynamicNodeEmbeddingModel(
+            embedding_dim=d_embed, context_size=context_len, lr=learning_rate
         )
 
     def add_temporal_edges(self, edges: List[Tuple[int, int, int]]):
@@ -61,19 +67,13 @@ class EmbeddingModel:
         return flattened_walks
 
     def _train_model_with_walks(self, walks):
-        if not self.embedding_model.wv.key_to_index:
-            self.embedding_model.build_vocab([[str(node) for node in walk] for walk in walks])
-        else:
-            self.embedding_model.build_vocab([[str(node) for node in walk] for walk in walks], update=True)
-
-        string_walks = [[str(node) for node in walk] for walk in walks]
-        self.embedding_model.train(string_walks, total_examples=len(walks), epochs=self.embedding_model.epochs)
+        self.embedding_model.train_model(walks, batch_size=self.batch_size, epochs=self.embedding_epochs)
 
     def get_embedding_for_node(self, node):
         try:
-            return self.embedding_model.wv[str(node)]
+            return self.embedding_model.get_embedding(node)
         except KeyError:
             raise NodeNotFoundError(node)
 
     def get_embedding_for_all_nodes(self):
-        return {int(node): self.embedding_model.wv[node] for node in self.embedding_model.wv.index_to_key}
+        return self.embedding_model.get_all_embeddings()
