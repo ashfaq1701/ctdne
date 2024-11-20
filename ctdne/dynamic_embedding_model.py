@@ -125,8 +125,8 @@ class DynamicEmbeddingModel(nn.Module):
         """
         total_loss = 0
         walk = torch.tensor(
-            [self._get_or_create_index(node_id) for node_id in walk], dtype=torch.long,  device=self.device
-        )
+            [self._get_or_create_index(node_id) for node_id in walk], dtype=torch.long
+        ).to(self.device)
 
         for i, current_node_idx in enumerate(walk):
             # Extract context window
@@ -135,8 +135,8 @@ class DynamicEmbeddingModel(nn.Module):
 
             context = torch.cat([walk[start:i], walk[i + 1:end]])
             distances = torch.tensor(
-                [abs(i - j) for j in range(start, end) if j != i], dtype=torch.float32,  device=self.device
-            )
+                [abs(i - j) for j in range(start, end) if j != i], dtype=torch.float32
+            ).to(self.device)
             discounts = self.discount_function(distances)
 
             # Calculate embeddings
