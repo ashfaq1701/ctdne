@@ -114,40 +114,31 @@ class DynamicEmbeddingModel(nn.Module):
         return batch_loss
 
     def _train_on_walk(self, walk):
-        """
-        Train the model on a single walk.
-
-        Args:
-            walk (list): A list of node IDs representing a walk.
-
-        Returns:
-            torch.Tensor: The loss for the current walk.
-        """
         total_loss = 0
         walk = torch.tensor(
-            [self._get_or_create_index(node_id) for node_id in walk], dtype=torch.long
-        ).to(self.device)
+            [self._get_or_create_index(node_id) for node_id in walk],
+            dtype=torch.long,
+            device=self.device  # Move tensor to the correct device
+        )
 
         for i, current_node_idx in enumerate(walk):
-            # Extract context window
             start = max(0, i - self.context_size)
             end = min(len(walk), i + self.context_size + 1)
 
-            context = torch.cat([walk[start:i], walk[i + 1:end]])
+            context = torch.cat([walk[start:i], walk[i + 1:end]]).to(self.device)
             distances = torch.tensor(
-                [abs(i - j) for j in range(start, end) if j != i], dtype=torch.float32
-            ).to(self.device)
+                [abs(i - j) for j in range(start, end) if j != i],
+                dtype=torch.float32,
+                device=self.device
+            )
             discounts = self.discount_function(distances)
 
-            # Calculate embeddings
             current_embedding = self.embeddings(current_node_idx).unsqueeze(0)
             context_embeddings = self.embeddings(context)
 
-            # Calculate similarity and loss
             similarities = torch.matmul(context_embeddings, current_embedding.T).squeeze()
             context_loss = torch.sum(discounts * (1 - similarities))
 
-            # Add norm penalty
             norm = torch.norm(current_embedding)
             context_loss += torch.relu(norm - self.max_norm)
 
