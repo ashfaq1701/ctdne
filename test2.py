@@ -26,7 +26,7 @@ if __name__ == '__main__':
         len_walk=LEN_WALK,
         random_picker_type="Linear",
         d_embed=D_EMBED,
-        embedding_epochs=20
+        max_node_count=70_000
     )
 
     for i in range(3):
@@ -39,5 +39,5 @@ if __name__ == '__main__':
     embedding_model.train_embedding_with_walks(walks)
     embeddings_for_all_nodes = embedding_model.get_embedding_for_all_nodes()
 
-    pickle.dump(embeddings_for_all_nodes, open('data/embeddings_for_all_nodes.pkl', 'wb'))
+    pickle.dump(embeddings_for_all_nodes, open('data/embeddings_for_all_nodes_2.pkl', 'wb'))
     print(f'Total runtime: {time.time() - start_time:.2f} seconds')

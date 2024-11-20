@@ -1,62 +1,150 @@
 import torch
 import torch.nn as nn
-from torch import optim
+import torch.optim as optim
 
 
-class DynamicNodeEmbeddingModel(nn.Module):
-    def __init__(self, embedding_dim, lr=0.001, max_norm=1.0, alpha=0.5, context_size=5):
+class DynamicEmbeddingModel(nn.Module):
+    def __init__(self, max_node_count, embedding_dim, lr=0.001, max_norm=1.0, alpha=0.5, context_size=5):
         """
-        Initialize the dynamic node embedding model.
+        Computes Dynamic Embedding
 
         Args:
+            max_node_count (int): Maximum number of nodes.
             embedding_dim (int): Dimensionality of node embeddings.
+            lr (float): Learning rate for the optimizer.
             max_norm (float): Maximum norm for node embeddings.
             alpha (float): Decay factor for discounting context weights.
             context_size (int): Size of the context window for training.
         """
-        super(DynamicNodeEmbeddingModel, self).__init__()
+        super(DynamicEmbeddingModel, self).__init__()
+        self.max_node_count = max_node_count
         self.embedding_dim = embedding_dim
         self.max_norm = max_norm
         self.alpha = alpha
         self.context_size = context_size
 
-        # Dictionary to store node embeddings
-        self.node_embeddings = nn.ParameterDict()
+        # Internal mapping for node IDs to indices
+        self.node_id_to_idx = {}
+        self.current_idx = 0
 
-        # Add a dummy parameter to ensure optimizer initialization
-        self.dummy_param = nn.Parameter(torch.zeros(self.embedding_dim))
+        # Fixed embedding matrix
+        self.embeddings = nn.Embedding(max_node_count, embedding_dim, max_norm=max_norm)
+        nn.init.uniform_(self.embeddings.weight, -1, 1)
 
+        # Optimizer for the embeddings
         self.optimizer = optim.Adam(self.parameters(), lr=lr)
+
+    def _get_or_create_index(self, node_id):
+        """
+        Get or create the internal index for a node ID.
+
+        Args:
+            node_id (int): The external node ID.
+
+        Returns:
+            int: Internal index corresponding to the node ID.
+        """
+        if node_id not in self.node_id_to_idx:
+            if self.current_idx >= self.max_node_count:
+                raise ValueError(f"Exceeded maximum node count ({self.max_node_count}).")
+            # Assign a new index
+            self.node_id_to_idx[node_id] = self.current_idx
+            self.current_idx += 1
+        return self.node_id_to_idx[node_id]
 
     def forward(self, node_ids):
         """
-        Retrieve or create embeddings for the given node IDs.
+        Retrieve embeddings for the given node IDs.
 
         Args:
-            node_ids (list): List of node IDs.
+            node_ids (list or tensor): List or tensor of node IDs.
 
         Returns:
-            torch.Tensor: Stack of embeddings for the provided node IDs.
+            torch.Tensor: Embeddings for the provided node IDs.
         """
-        embeddings = []
-        for node_id in node_ids:
-            if str(node_id) not in self.node_embeddings:
-                # Initialize a new embedding for unseen nodes
-                new_embedding = nn.Parameter(torch.randn(self.embedding_dim).uniform_(-1, 1))
-                self.node_embeddings[str(node_id)] = new_embedding
-                self.optimizer.add_param_group({"params": [new_embedding]})
-            # Retrieve the embedding
-            embeddings.append(self.node_embeddings[str(node_id)])
-        return torch.stack(embeddings)
+        indices = torch.tensor([self._get_or_create_index(node_id) for node_id in node_ids], dtype=torch.long)
+        return self.embeddings(indices)
 
-    def constrain_norms(self):
+    def train_model(self, walks, batch_size=128, epochs=10):
         """
-        Ensure embeddings have norms <= max_norm.
+        Train the node embeddings based on walks in batches.
+
+        Args:
+            walks (list): List of walks (each walk is a list of node IDs).
+            batch_size (int): Size of the training batches.
+            epochs (int): Number of training epochs.
         """
-        for node_id, embedding in self.node_embeddings.items():
-            norm = torch.norm(embedding.data)
-            if norm > self.max_norm:
-                self.node_embeddings[node_id].data = embedding.data / norm * self.max_norm
+        for epoch in range(epochs):
+            total_loss = 0
+            num_batches = len(walks) // batch_size
+
+            for batch_idx in range(num_batches):
+                batch_walks = walks[batch_idx * batch_size: (batch_idx + 1) * batch_size]
+                batch_loss = self._train_on_walk_batch(batch_walks)
+
+                self.optimizer.zero_grad()
+                batch_loss.backward()
+                self.optimizer.step()
+
+                total_loss += batch_loss.item()
+
+            print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / num_batches:.4f}")
+
+    def _train_on_walk_batch(self, batch_walks):
+        """
+        Train the model on a batch of walks.
+
+        Args:
+            batch_walks (list): A batch of walks (list of node ID lists).
+
+        Returns:
+            torch.Tensor: The loss for the batch of walks.
+        """
+        batch_loss = 0
+        for walk in batch_walks:
+            walk_loss = self._train_on_walk(walk)
+            batch_loss += walk_loss
+        return batch_loss
+
+    def _train_on_walk(self, walk):
+        """
+        Train the model on a single walk.
+
+        Args:
+            walk (list): A list of node IDs representing a walk.
+
+        Returns:
+            torch.Tensor: The loss for the current walk.
+        """
+        total_loss = 0
+        walk = torch.tensor([self._get_or_create_index(node_id) for node_id in walk], dtype=torch.long)
+
+        for i, current_node_idx in enumerate(walk):
+            # Extract context window
+            start = max(0, i - self.context_size)
+            end = min(len(walk), i + self.context_size + 1)
+
+            context = torch.cat([walk[start:i], walk[i + 1:end]])
+            distances = torch.tensor(
+                [abs(i - j) for j in range(start, end) if j != i], dtype=torch.float32
+            )
+            discounts = self.discount_function(distances)
+
+            # Calculate embeddings
+            current_embedding = self.embeddings(current_node_idx).unsqueeze(0)
+            context_embeddings = self.embeddings(context)
+
+            # Calculate similarity and loss
+            similarities = torch.matmul(context_embeddings, current_embedding.T).squeeze()
+            context_loss = torch.sum(discounts * (1 - similarities))
+
+            # Add norm penalty
+            norm = torch.norm(current_embedding)
+            context_loss += torch.relu(norm - self.max_norm)
+
+            total_loss += context_loss
+
+        return total_loss
 
     def discount_function(self, distances):
         """
@@ -70,108 +158,20 @@ class DynamicNodeEmbeddingModel(nn.Module):
         """
         return torch.exp(-self.alpha * distances)
 
-    def train_model(self, walks, batch_size=128, epochs=10):
-        """
-        Train the node embeddings based on walks in batches.
-
-        Args:
-            walks (list): List of walks (each walk is a list of node IDs).
-            batch_size (int): Size of the training batches.
-            lr (float): Learning rate.
-            epochs (int): Number of training epochs.
-        """
-        for epoch in range(epochs):
-            total_loss = 0
-            num_batches = len(walks) // batch_size
-
-            for batch_idx in range(num_batches):
-                batch_walks = walks[batch_idx * batch_size: (batch_idx + 1) * batch_size]
-                batch_nodes = {str(node) for walk in batch_walks for node in walk}
-
-                batch_loss = 0
-                for walk in batch_walks:
-                    walk_loss = self._train_on_walk(walk)
-                    batch_loss += walk_loss
-
-                for node_id, embedding in self.node_embeddings.items():
-                    if node_id not in batch_nodes:
-                        embedding.grad = None
-
-                self.optimizer.zero_grad()
-                batch_loss.backward()
-                self.optimizer.step()
-
-                # Enforce norm constraints
-                self.constrain_norms()
-
-                total_loss += batch_loss.item()
-
-            print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / num_batches:.4f}")
-
-    def _train_on_walk(self, walk):
-        """
-        Train the model on a single walk.
-
-        Args:
-            walk (list): A list of node IDs representing a walk.
-
-        Returns:
-            torch.Tensor: The loss for the current walk.
-        """
-        total_loss = 0
-
-        for i, current_node in enumerate(walk):
-            # Extract context window
-            start = max(0, i - self.context_size)
-            end = min(len(walk), i + self.context_size + 1)
-
-            context = []
-            if start < i:
-                context.extend(walk[start:i])
-            if i + 1 < end:
-                context.extend(walk[i + 1:end])
-
-            # Calculate distances for discounting
-            distances = torch.tensor(
-                [abs(i - j) for j in range(start, end) if j != i], dtype=torch.float32
-            )
-            discounts = self.discount_function(distances)
-
-            # Get current node embedding
-            current_embedding = self([current_node])
-
-            # Calculate context embeddings and update
-            context_loss = 0
-            for j, context_node in enumerate(context):
-                context_embedding = self([context_node])
-
-                # Move embeddings closer
-                similarity = torch.dot(
-                    current_embedding.squeeze(), context_embedding.squeeze()
-                )
-                context_loss += discounts[j] * (1 - similarity)
-
-            # Handle self-loops by constraining norm
-            norm = torch.norm(current_embedding)
-            context_loss += torch.relu(norm - self.max_norm)
-
-            total_loss += context_loss
-
-        return total_loss
-
     def get_embedding(self, node_id):
         """
         Retrieve the embedding for a specific node.
 
         Args:
-            node_id (int): Node ID.
+            node_id (int): External node ID.
 
         Returns:
             torch.Tensor: Embedding for the specified node.
         """
-        if str(node_id) not in self.node_embeddings:
+        idx = self.node_id_to_idx.get(node_id)
+        if idx is None:
             raise KeyError(f"Node {node_id} is not in the embeddings.")
-        return self.node_embeddings[str(node_id)].detach().cpu()
+        return self.embeddings(torch.tensor([idx], dtype=torch.long)).detach().cpu()
 
     def get_all_embeddings(self):
         """
@@ -180,4 +180,5 @@ class DynamicNodeEmbeddingModel(nn.Module):
         Returns:
             dict: A dictionary with node IDs as keys and embeddings as values.
         """
-        return {node_id: embedding.detach().cpu() for node_id, embedding in self.node_embeddings.items()}
+        return {node_id: self.embeddings(torch.tensor([idx], dtype=torch.long)).detach().cpu()
+                for node_id, idx in self.node_id_to_idx.items()}

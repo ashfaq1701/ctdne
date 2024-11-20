@@ -37,6 +37,7 @@ if __name__ == '__main__':
         len_walk=args.len_walk,
         random_picker_type="Linear",
         d_embed=args.d_embed,
+        max_node_count=70_000
     )
 
     data = read_data()

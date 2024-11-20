@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 import numpy as np
 from temporal_walk import TemporalWalk
 
-from ctdne.dynamic_embedding_model import DynamicNodeEmbeddingModel
+from ctdne.dynamic_embedding_model import DynamicEmbeddingModel
 
 
 class NodeNotFoundError(Exception):
@@ -18,6 +18,7 @@ class EmbeddingModel:
             len_walk: int,
             random_picker_type: str,
             d_embed: int,
+            max_node_count: int,
             max_time_capacity: Optional[int]=None,
             batch_size: int = 10_000,
             embedding_epochs: int=5,
@@ -34,8 +35,8 @@ class EmbeddingModel:
         self.embedding_epochs = embedding_epochs
 
         self.temporal_walk = TemporalWalk(num_walks, len_walk, random_picker_type, max_time_capacity)
-        self.embedding_model = DynamicNodeEmbeddingModel(
-            embedding_dim=d_embed, context_size=context_len, lr=learning_rate
+        self.embedding_model = DynamicEmbeddingModel(
+            max_node_count=max_node_count, embedding_dim=d_embed, context_size=context_len, lr=learning_rate
         )
 
     def add_temporal_edges(self, edges: List[Tuple[int, int, int]]):
