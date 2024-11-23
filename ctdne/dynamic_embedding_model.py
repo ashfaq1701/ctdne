@@ -22,11 +22,7 @@ class DynamicEmbeddingModel(nn.Module):
         self.max_norm = max_norm
         self.alpha = alpha
         self.context_size = context_size
-        self.device = device or torch.device(
-            'cuda' if torch.cuda.is_available()
-            else 'mps' if torch.backends.mps.is_available()
-            else 'cpu'
-        )
+        self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # Internal mapping for node IDs to indices
         self.node_id_to_idx = {}
