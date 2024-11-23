@@ -1,25 +1,28 @@
 import argparse
 import csv
 import time
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
 
 from ctdne import EmbeddingModel
 
 
 def read_data():
-    data_file_path = 'data/sample_data.csv'
+    data_file_path = 'data/reddit.parquet'
+    df = pd.read_parquet(data_file_path)
+    unique_nodes = pd.unique(df[['SOURCE_SUBREDDIT', 'TARGET_SUBREDDIT']].values.ravel())
 
-    data_tuples = []
+    label_encoder = LabelEncoder()
+    label_encoder.fit(unique_nodes)
 
-    with open(data_file_path, mode='r', newline='') as csvfile:
-        csv_reader = csv.reader(csvfile)
-        next(csv_reader)
-        for row in csv_reader:
-            u = int(row[0])
-            i = int(row[1])
-            ts = int(row[2])
-            data_tuples.append((u, i, ts))
+    df['u'] = label_encoder.fit_transform(df['SOURCE_SUBREDDIT']) + 1
+    df['i'] = label_encoder.fit_transform(df['TARGET_SUBREDDIT']) + 1
 
-    return data_tuples
+    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
+    df['t'] = df['TIMESTAMP'].astype('int64') // 10 ** 9
+
+    data_np = df[['u', 'i', 't']].to_numpy()
+    return [(row[0], row[1], row[2]) for row in data_np]
 
 
 if __name__ == '__main__':
