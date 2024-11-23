@@ -8,19 +8,8 @@ from ctdne import EmbeddingModel
 
 
 def read_data():
-    data_file_path = 'data/reddit.parquet'
-    df = pd.read_parquet(data_file_path)
-    unique_nodes = pd.unique(df[['SOURCE_SUBREDDIT', 'TARGET_SUBREDDIT']].values.ravel())
-
-    label_encoder = LabelEncoder()
-    label_encoder.fit(unique_nodes)
-
-    df['u'] = label_encoder.fit_transform(df['SOURCE_SUBREDDIT']) + 1
-    df['i'] = label_encoder.fit_transform(df['TARGET_SUBREDDIT']) + 1
-
-    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
-    df['t'] = df['TIMESTAMP'].astype('int64') // 10 ** 9
-
+    data_file_path = 'data/data.csv'
+    df = pd.read_csv(data_file_path)
     data_np = df[['u', 'i', 't']].to_numpy()
     return [(row[0], row[1], row[2]) for row in data_np]
 
