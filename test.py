@@ -1,8 +1,7 @@
 import argparse
-import csv
 import time
+
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 
 from ctdne import EmbeddingModel
 
