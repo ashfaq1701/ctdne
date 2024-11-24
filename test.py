@@ -1,4 +1,5 @@
 import argparse
+import pickle
 import time
 
 import pandas as pd
@@ -49,5 +50,12 @@ if __name__ == '__main__':
     print(f"Embedding extraction time: {time.time() - embedding_extraction_start_time:.2f} seconds")
 
     selected_node = list(embeddings_for_all_nodes.keys())[0]
+
+    with open('data/walks.pkl', 'wb') as f:
+        pickle.dump(walks, f)
+
+    with open('data/embeddings.pkl', 'wb') as f:
+        pickle.dump(embeddings_for_all_nodes, f)
+
     print(f"Total nodes: {len(embeddings_for_all_nodes)}, embedding size: {len(embeddings_for_all_nodes[selected_node])}")
     print(f"Total time: {time.time() - start_time:.2f} seconds")
