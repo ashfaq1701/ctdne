@@ -8,7 +8,7 @@ from ctdne import EmbeddingModel
 
 
 def read_data():
-    data_file_path = 'data/data.csv'
+    data_file_path = 'data/data_reddit.csv'
     df = pd.read_csv(data_file_path)
     data_np = df[['u', 'i', 't']].to_numpy()
     return [(row[0], row[1], row[2]) for row in data_np]
