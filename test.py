@@ -7,9 +7,14 @@ import pandas as pd
 from ctdne import EmbeddingModel
 
 
-def read_data():
-    data_file_path = 'data/data_reddit.csv'
-    df = pd.read_csv(data_file_path)
+def read_data(dataset):
+    data_file_path = f'data/data_{dataset}.{"parquet" if dataset == "alibaba" else "csv"}'
+
+    if dataset == 'alibaba':
+        df = pd.read_parquet(data_file_path)
+    else:
+        df = pd.read_csv(data_file_path)
+
     data_np = df[['u', 'i', 't']].to_numpy()
     return [(row[0], row[1], row[2]) for row in data_np]
 
@@ -20,6 +25,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_walks', type=int, default=100, help='Number of walks per node.')
     parser.add_argument('--len_walk', type=int, default=200, help='Length of each walk.')
     parser.add_argument('--d_embed', type=int, default=256, help='Dimension of embeddings of each node.')
+    parser.add_argument('--dataset', type=str, default='alibaba', help='Dataset (alibaba or reddit)')
+    parser.add_argument('--random_picker', type=str, default='Linear', help='Random Picker (Linear, Exponential or Uniform)')
 
     args = parser.parse_args()
 
@@ -27,11 +34,11 @@ if __name__ == '__main__':
     embedding_model = EmbeddingModel(
         num_walks=args.num_walks,
         len_walk=args.len_walk,
-        random_picker_type="Linear",
+        random_picker_type=args.random_picker,
         d_embed=args.d_embed,
     )
 
-    data = read_data()
+    data = read_data(args.dataset)
 
     edge_addition_start_time = time.time()
     embedding_model.add_temporal_edges(data)
@@ -51,10 +58,10 @@ if __name__ == '__main__':
 
     selected_node = list(embeddings_for_all_nodes.keys())[0]
 
-    with open('data/walks.pkl', 'wb') as f:
+    with open(f'data/walks_{args.dataset}_{args.random_picker}.pkl', 'wb') as f:
         pickle.dump(walks, f)
 
-    with open('data/embeddings.pkl', 'wb') as f:
+    with open(f'data/embeddings_{args.dataset}_{args.random_picker}.pkl', 'wb') as f:
         pickle.dump(embeddings_for_all_nodes, f)
 
     print(f"Total nodes: {len(embeddings_for_all_nodes)}, embedding size: {len(embeddings_for_all_nodes[selected_node])}")
